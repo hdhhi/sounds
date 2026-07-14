@@ -1,0 +1,47 @@
+name: Unzip MP3s
+
+# 실행 조건: 수동 실행 버튼 + zip이 올라오면 자동
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '*.zip'
+
+permissions:
+  contents: write
+
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 가져오기
+        uses: actions/checkout@v4
+
+      - name: zip 압축 풀기 (한글 파일명 CP949 처리)
+        run: |
+          python3 - <<'PY'
+          import zipfile, glob
+          count = 0
+          for zpath in sorted(glob.glob("*.zip")):
+              with zipfile.ZipFile(zpath) as z:
+                  for zi in z.infolist():
+                      if zi.is_dir():
+                          continue
+                      # UTF-8 플래그가 없으면 zipfile이 cp437로 디코딩한 상태 → cp949로 원복
+                      try:
+                          name = zi.filename.encode('cp437').decode('cp949')
+                      except Exception:
+                          name = zi.filename
+                      with open(name, 'wb') as f:
+                          f.write(z.read(zi))
+                      count += 1
+          print("추출한 mp3 개수:", count)
+          PY
+
+      - name: mp3 저장소에 커밋
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Extract individual mp3 files from zips" || echo "커밋할 변경 없음"
+          git push
